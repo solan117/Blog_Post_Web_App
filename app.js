@@ -1,109 +1,72 @@
-const   express = require("express"),
-        app = express(),
-        bodyparser = require("body-parser"),
-        mongoose = require("mongoose"),
-        Campground = require("./models/campground");
+var express = require("express"),
+    app = express(),
+    bodyParser = require("body-parser"),
+    mongoose = require("mongoose"),
+    passport = require("passport"),
+    cookieParser = require("cookie-parser"),
+    LocalStrategy = require("passport-local"),
+    flash = require("connect-flash"),
+    Campground = require("./models/campground"),
+    Comment = require("./models/comment"),
+    User = require("./models/user"),
+    session = require("express-session"),
+    seedDB = require("./seeds"),
+    methodOverride = require("method-override");
+// configure dotenv
+require("dotenv").load();
 
-mongoose.connect('mongodb://localhost:27017/yelp_camp', {useNewUrlParser: true, useUnifiedTopology: true});
-app.use(bodyparser.urlencoded({ extended: true }));
+//requiring routes
+var commentRoutes = require("./routes/comments"),
+    campgroundRoutes = require("./routes/campgrounds"),
+    indexRoutes = require("./routes/index");
+
+// assign mongoose promise library and connect to database
+mongoose.Promise = global.Promise;
+
+const databaseUri =
+    process.env.MONGODB_URI || "mongodb://localhost:27017/yelp_camp";
+
+mongoose
+    .connect(databaseUri, { useMongoClient: true })
+    .then(() => console.log(`Database connected`))
+    .catch((err) => console.log(`Database connection error: ${err.message}`));
+
+app.use(bodyParser.urlencoded({ extended: true }));
 app.set("view engine", "ejs");
+app.use(express.static(__dirname + "/public"));
+app.use(methodOverride("_method"));
+app.use(cookieParser("secret"));
+//require moment
+app.locals.moment = require("moment");
+// seedDB(); //seed the database
 
-//schema setup
+// PASSPORT CONFIGURATION
+app.use(
+    require("express-session")({
+        secret: "Once again Rusty wins cutest dog!",
+        resave: false,
+        saveUninitialized: false,
+    })
+);
 
+app.use(flash());
+app.use(passport.initialize());
+app.use(passport.session());
+passport.use(new LocalStrategy(User.authenticate()));
+passport.serializeUser(User.serializeUser());
+passport.deserializeUser(User.deserializeUser());
 
-
-Campground.create({
-    name:"battle",
-    image:"https://news.wttw.com/sites/default/files/styles/full/public/field/image/CampingKelleCruzFlickrCrop.jpg?itok=MViTDefw",
-    description: "Therefore, a campground consists typically of open pieces of ground where a camper can pitch a tent or park a camper. More specifically a campsite is a dedicated area set aside for camping and for which often a user fee is charged. Campsites typically feature a few (but sometimes no) improvements."
-},function(err, campground){
-    if(err){
-        console.log(err);
-    }
-    else{
-        console.log("campground created");
-        console.log(campground);
-    }
-}) 
-
-
-var campgrounds = [
-    { name: "Battle", image: "https://news.wttw.com/sites/default/files/styles/full/public/field/image/CampingKelleCruzFlickrCrop.jpg?itok=MViTDefw" },
-    { name: "Battle", image: "https://news.wttw.com/sites/default/files/styles/full/public/field/image/CampingKelleCruzFlickrCrop.jpg?itok=MViTDefw" },
-    { name: "Battle", image: "https://news.wttw.com/sites/default/files/styles/full/public/field/image/CampingKelleCruzFlickrCrop.jpg?itok=MViTDefw" },
-    { name: "Battle", image: "https://news.wttw.com/sites/default/files/styles/full/public/field/image/CampingKelleCruzFlickrCrop.jpg?itok=MViTDefw" },
-    { name: "Battle", image: "https://news.wttw.com/sites/default/files/styles/full/public/field/image/CampingKelleCruzFlickrCrop.jpg?itok=MViTDefw" },
-    { name: "Battle", image: "https://news.wttw.com/sites/default/files/styles/full/public/field/image/CampingKelleCruzFlickrCrop.jpg?itok=MViTDefw" },
-    { name: "Battle", image: "https://news.wttw.com/sites/default/files/styles/full/public/field/image/CampingKelleCruzFlickrCrop.jpg?itok=MViTDefw" },
-    { name: "Battle", image: "https://news.wttw.com/sites/default/files/styles/full/public/field/image/CampingKelleCruzFlickrCrop.jpg?itok=MViTDefw" }
-]
-
-
-app.get("/", function (req, res) {
-    res.render("landing");
-})
-
-
-
-app.get("/campgrounds", function (req, res) {
-  //  res.render("campgrounds", { campgrounds: campgrounds });
-  //get all campgrounds
-
-  Campground.find({},function(err,allcampgrounds){
-      if(err){
-          console.log(err);
-      }
-      else{
-          res.render("campgrounds",{campgrounds:allcampgrounds});
-      }
-  }
-)
+app.use(function(req, res, next) {
+    res.locals.currentUser = req.user;
+    res.locals.success = req.flash("success");
+    res.locals.error = req.flash("error");
+    next();
 });
 
-app.post("/campgrounds", function (req, res) {
+app.use("/", indexRoutes);
+app.use("/campgrounds", campgroundRoutes);
+app.use("/campgrounds/:id/comments", commentRoutes);
 
-    var name = req.body.name;
-    var image = req.body.image;
-    var desc = req.body.description;
-    var newCampground = { name: name, image: image, description : desc };
-    
-    //create a new campgrounds
-    Campground.create(newCampground,function(err, newlyCreated){
-        if(err){
-            console.log(err);
-        }
-        else{
-            res.redirect("/campgrounds");
-            //console.log(name);
-            //console.log(image);
-        }
-    })
-
-    
-
-    //get data from form and add to campgrounds array
-
-    //redirect back to campgrounds page
-})
-
-app.get("/campgrounds/new", function (req, res) {
-    res.render("new");
-})
-
-
-//Show more info about campground
-app.get("/campgrounds/:id",function(req,res){
-
-    Campground.findById(req.params.id, function(err, foundCampground){
-        if(err){
-            console.log(err);
-        }
-        else{
-            res.render("show",{campground:foundCampground});
-        }
-    })
-})
-
-app.listen(3000, function () {
-    console.log("Connected");
+app.listen(process.env.PORT, process.env.IP, function() {
+    console.log("The YelpCamp Server Has Started!");
 });
